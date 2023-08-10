@@ -96,7 +96,10 @@ fn generate_world(
     let (grid_width, grid_height) = map.size();
     debug!("Map size: {}x{}", grid_width, grid_height);
 
-    let tile_size = 32_f32;
+    let tile_size = 64_f32;
+
+    let start_x = -(grid_width as f32) * tile_size / 2.0;
+    let start_y = -(grid_height as f32) * tile_size / 2.0;
 
     for col_x in 0..grid_width {
         for col_y in 0..grid_height {
@@ -104,8 +107,8 @@ fn generate_world(
             // if val > 0.8_f64 {
                 // debug!("Value for {}:{} = {}", col_x, col_y, val);
             // }
-            let x = col_x as f32 * tile_size;
-            let y = col_y as f32 * tile_size;
+            let x = start_x + col_x as f32 * tile_size;
+            let y = start_y + col_y as f32 * tile_size;
 
             commands.spawn(
                 SpriteBundle {
