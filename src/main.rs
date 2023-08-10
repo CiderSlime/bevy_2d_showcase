@@ -9,30 +9,29 @@ use rand::{thread_rng, Rng};
 
 use noise::{utils::*, BasicMulti, Perlin};
 
+mod plugins;
+pub mod common;
+
+use crate::common::AppState;
+
 
 fn main() {
     App::new()
         .init_resource::<RpgSpriteHandles>()
-        .add_plugins(DefaultPlugins
+        .add_plugins((DefaultPlugins
             .set(ImagePlugin::default_nearest())
             .set(LogPlugin{
                 level: Level::DEBUG,
                 filter: "wgpu=error,naga=error,bevy_render=error,bevy_app=info,bevy_ecs=info".to_string()
-            })
-        ) // prevents blurry sprites
+            }),
+            plugins::camera::CameraPlugin
+        )) // prevents blurry sprites
         .add_state::<AppState>()
         .add_systems(OnEnter(AppState::Setup), generate_world)
         // .add_systems(OnEnter(AppState::Setup), load_textures)
         // .add_systems(Update, check_textures.run_if(in_state(AppState::Setup)))
         .add_systems(OnEnter(AppState::Finished), setup)
         .run();
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, States)]
-enum AppState {
-    #[default]
-    Setup,
-    Finished,
 }
 
 #[derive(Resource, Default)]
@@ -150,7 +149,7 @@ fn setup(
     // let atlas_handle = texture_atlases.add(texture_atlas);
 
     // set up a scene to display our texture atlas
-    commands.spawn(Camera2dBundle::default());
+    // commands.spawn(Camera2dBundle::default());
     // draw a sprite from the atlas
     // commands.spawn(SpriteSheetBundle {
     //     transform: Transform {
