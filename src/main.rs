@@ -5,6 +5,8 @@ use bevy::{asset::LoadState, prelude::*};
 use bevy::log::{Level, LogPlugin};
 use bevy::render::color::Color;
 
+use bevy_ecs_tilemap::prelude::*;
+
 use rand::{thread_rng, Rng};
 
 use noise::{utils::*, BasicMulti, Perlin};
@@ -13,6 +15,9 @@ mod plugins;
 pub mod common;
 
 use crate::common::AppState;
+
+// Side length of a colored quadrant (in "number of tiles").
+const QUADRANT_SIDE_LENGTH: u32 = 32;
 
 
 fn main() {
@@ -38,25 +43,6 @@ fn main() {
 struct RpgSpriteHandles {
     handles: Vec<HandleUntyped>,
 }
-
-// fn load_textures(mut rpg_sprite_handles: ResMut<RpgSpriteHandles>, asset_server: Res<AssetServer>) {
-    // load multiple, individual sprites from a folder
-
-    // rpg_sprite_handles.handles = asset_server.load_folder("textures/rpg").unwrap();
-// }
-
-// fn check_textures(
-//     mut next_state: ResMut<NextState<AppState>>,
-//     rpg_sprite_handles: ResMut<RpgSpriteHandles>,
-//     asset_server: Res<AssetServer>,
-// ) {
-//     // Advance the `AppState` once all sprite handles have been loaded by the `AssetServer`
-//     if let LoadState::Loaded = asset_server
-//         .get_group_load_state(rpg_sprite_handles.handles.iter().map(|handle| handle.id()))
-//     {
-//         next_state.set(AppState::Finished);
-//     }
-// }
 
 fn generate_noise_map() -> NoiseMap {
     let mut rng = thread_rng();
@@ -88,42 +74,102 @@ fn get_color(val: f64) -> Color {
     color_result.expect("Getting color from HEX error")
 }
 
+fn get_index(val: f64) -> u32 {
+    match val.abs() {
+        v if v < 0.1 => 0,
+        v if v < 0.2 => 1,
+        v if v < 0.3 => 3,
+        v if v < 0.4 => 5,
+        v if v < 0.5 => 7,
+        v if v < 0.6 => 9,
+        v if v < 0.7 => 11,
+        v if v < 0.8 => 17,
+        v if v < 0.9 => 18,
+        v if v <= 1.0 => 19,
+        _ => panic!("unexpected value")
+    }
+}
+
 fn generate_world(
     mut commands: Commands,
-    mut next_state: ResMut<NextState<AppState>>
+    mut next_state: ResMut<NextState<AppState>>,
+    asset_server: Res<AssetServer>
 ) {
+    let texture_handle: Handle<Image> = asset_server.load("grassland_tiles.png");
+
     let map = generate_noise_map();
     let (grid_width, grid_height) = map.size();
     debug!("Map size: {}x{}", grid_width, grid_height);
 
-    let tile_size = 64_f32;
+    // let tile_size = 64_f32;
+    //
+    // let start_x = -(grid_width as f32) * tile_size / 2.0;
+    // let start_y = -(grid_height as f32) * tile_size / 2.0;
 
-    let start_x = -(grid_width as f32) * tile_size / 2.0;
-    let start_y = -(grid_height as f32) * tile_size / 2.0;
+    // In total, there will be `(QUADRANT_SIDE_LENGTH * 2) * (QUADRANT_SIDE_LENGTH * 2)` tiles.
+    let map_size = TilemapSize {
+        x: QUADRANT_SIDE_LENGTH * grid_width as u32,
+        y: QUADRANT_SIDE_LENGTH * grid_height as u32,
+    };
+    let quadrant_size = TilemapSize {
+        x: QUADRANT_SIDE_LENGTH,
+        y: QUADRANT_SIDE_LENGTH,
+    };
+    let mut tile_storage = TileStorage::empty(map_size);
+    let tilemap_entity = commands.spawn_empty().id();
+    let tilemap_id = TilemapId(tilemap_entity);
 
     for col_x in 0..grid_width {
         for col_y in 0..grid_height {
+            // debug!("Building tile: {}x{}", col_x, col_y);
             let val = map.get_value(col_x, col_y);
+            let index = get_index(val);
+
+            fill_tilemap_rect(
+                TileTextureIndex(index),
+                TilePos { x: QUADRANT_SIDE_LENGTH * col_x as u32, y: QUADRANT_SIDE_LENGTH * col_y as u32 },
+                quadrant_size,
+                tilemap_id,
+                &mut commands,
+                &mut tile_storage,
+            );
             // if val > 0.8_f64 {
                 // debug!("Value for {}:{} = {}", col_x, col_y, val);
             // }
-            let x = start_x + col_x as f32 * tile_size;
-            let y = start_y + col_y as f32 * tile_size;
-
-            commands.spawn(
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: get_color(val),
-                        custom_size: Some(Vec2::new(tile_size, tile_size)),
-                        ..default()
-                    },
-                    transform: Transform::from_translation(Vec3::new(x, y, 0.)),
-                    ..default()
-                }
-            );
+            // let x = start_x + col_x as f32 * tile_size;
+            // let y = start_y + col_y as f32 * tile_size;
+            //
+            // commands.spawn(
+            //     SpriteBundle {
+            //         sprite: Sprite {
+            //             color: get_color(val),
+            //             custom_size: Some(Vec2::new(tile_size, tile_size)),
+            //             ..default()
+            //         },
+            //         transform: Transform::from_translation(Vec3::new(x, y, 0.)),
+            //         ..default()
+            //     }
+            // );
         }
     }
-     next_state.set(AppState::Finished);
+    let tile_size = TilemapTileSize { x: 64.0, y: 32.0 };
+    let grid_size = tile_size.into();
+    let map_type = TilemapType::Isometric(IsoCoordSystem::Diamond);
+
+    debug!("Inserting TilemapBundle");
+    commands.entity(tilemap_entity).insert(TilemapBundle {
+        grid_size,
+        size: map_size,
+        storage: tile_storage,
+        texture: TilemapTexture::Single(texture_handle),
+        tile_size,
+        map_type,
+        transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
+        ..Default::default()
+    });
+
+    debug!("Switching State to Finished");
+    next_state.set(AppState::Finished);
 }
 
 fn setup(
@@ -133,6 +179,7 @@ fn setup(
     // mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     // mut textures: ResMut<Assets<Image>>,
 ) {
+    debug!("Entering setup");
     // Build a `TextureAtlas` using the individual sprites
     // let mut texture_atlas_builder = TextureAtlasBuilder::default();
     // for handle in &rpg_sprite_handles.handles {
