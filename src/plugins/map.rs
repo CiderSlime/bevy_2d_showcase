@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_ecs_tilemap::prelude::*;
 use rand::{thread_rng, Rng};
-use noise::{utils::*, BasicMulti, Perlin};
+use noise::{utils::*, Perlin, Terrace};
 use crate::common::AppState;
 
 
@@ -18,45 +18,30 @@ fn generate_noise_map() -> NoiseMap {
     let mut rng = thread_rng();
     let seed: u32 = rng.gen();
 
-    let basicmulti = BasicMulti::<Perlin>::new(seed);
+    // let basicmulti = BasicMulti::<Perlin>::new(seed);
 
-    PlaneMapBuilder::<_, 2>::new(&basicmulti)
-        // .set_size(100, 100)
+    let perlin = Perlin::new(1);
+
+    let terrace_inverted = Terrace::new(perlin)
+        .add_control_point(-1.0)
+        .add_control_point(-0.5)
+        .add_control_point(0.1)
+        .add_control_point(1.0)
+        .invert_terraces(true);
+
+    PlaneMapBuilder::<_, 2>::new(&terrace_inverted)
+        .set_size(10, 10)
         // .set_x_bounds(-5.0, 5.0)
         // .set_y_bounds(-5.0, 5.0)
         .build()
 }
 
-// fn get_color(val: f64) -> Color {
-//     let color_result = match val.abs() {
-//         v if v < 0.1 => Color::hex("#0a7e0a"),
-//         v if v < 0.2 => Color::hex("#0da50d"),
-//         v if v < 0.3 => Color::hex("#10cb10"),
-//         v if v < 0.4 => Color::hex("#18ed18"),
-//         v if v < 0.5 => Color::hex("#3ff03f"),
-//         v if v < 0.6 => Color::hex("#65f365"),
-//         v if v < 0.7 => Color::hex("#8cf68c"),
-//         v if v < 0.8 => Color::hex("#b2f9b2"),
-//         v if v < 0.9 => Color::hex("#d9fcd9"),
-//         v if v <= 1.0 => Color::hex("#ffffff"),
-//         _ => panic!("unexpected value")
-//     };
-//     color_result.expect("Getting color from HEX error")
-// }
-
 fn get_index(val: f64) -> TileTextureIndex {
+    let mut rng = thread_rng();
     let res = match val.abs() {
-        v if v < 0.1 => 0,
-        v if v < 0.2 => 1,
-        v if v < 0.3 => 3,
-        v if v < 0.4 => 5,
-        v if v < 0.5 => 7,
-        v if v < 0.6 => 9,
-        v if v < 0.7 => 11,
-        v if v < 0.8 => 17,
-        v if v < 0.9 => 18,
-        v if v <= 1.0 => 19,
-        _ => panic!("unexpected value")
+        // v if v < 0.11 => rng.gen_range(9..=12),
+        _ => rng.gen_range(0..=3),
+
     };
     TileTextureIndex(res)
 }
@@ -66,7 +51,7 @@ fn generate_world(
     mut next_state: ResMut<NextState<AppState>>,
     asset_server: Res<AssetServer>
 ) {
-    let texture_handle: Handle<Image> = asset_server.load("grassland_tiles.png");
+    let texture_handle: Handle<Image> = asset_server.load("grass_and_water.png");
 
     let map = generate_noise_map();
     let (grid_width, grid_height) = map.size();
@@ -100,8 +85,8 @@ fn generate_world(
         }
     });
 
-    let tile_size = TilemapTileSize { x: 64.0, y: 32.0 };
-    let grid_size = tile_size.into();
+    let tile_size = TilemapTileSize { x: 64.0, y: 48.0 };
+    let grid_size = TilemapGridSize { x: 64.0, y: 40.0 };
     let map_type = TilemapType::Isometric(IsoCoordSystem::Diamond);
 
     debug!("Inserting TilemapBundle");
